@@ -26,15 +26,35 @@
   save();
 
   // ---------- 전송 ----------
+  // 보낼 응답을 대기열에 쌓고, 성공한 것만 지운다. 실패분은 다음 전송 때 다시 보낸다
+  const QKEY = STORE + '-pending';
+  const readQ = () => { try { return JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch (e) { return []; } };
+  const writeQ = (q) => { try { localStorage.setItem(QKEY, JSON.stringify(q)); } catch (e) {} };
+  let flushing = false;
+  async function flush() {
+    if (flushing || !window.ENDPOINT) return;
+    flushing = true;
+    try {
+      // 보내는 동안 새로 쌓인 것까지 대기열이 빌 때까지 보낸다
+      while (true) {
+        const body = readQ()[0];
+        if (!body) break;
+        try {
+          const r = await fetch(window.ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body });
+          if (!r.ok) break;
+          writeQ(readQ().filter(b => b !== body));
+        } catch (err) { console.warn('전송 실패, 다음에 다시 보냄', err); break; }
+      }
+    } finally { flushing = false; }
+  }
   function send(step, payload) {
     const body = JSON.stringify({ rid: st.rid, step, ts: new Date().toISOString(), payload });
-    const backup = JSON.parse(localStorage.getItem(STORE + '-outbox') || '[]');
-    backup.push(body);
-    try { localStorage.setItem(STORE + '-outbox', JSON.stringify(backup)); } catch (e) {}
+    writeQ([...readQ(), body]);
     if (!window.ENDPOINT) { console.info('[미리보기] 전송 생략', body); return; }
-    fetch(window.ENDPOINT, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body })
-      .catch(err => console.warn('전송 실패', err));
+    flush();
   }
+  window.addEventListener('online', flush);
+  flush();
 
   // ---------- 공통 ----------
   const el = (tag, attrs = {}, ...kids) => {
