@@ -1,0 +1,109 @@
+/* 블라인드 비교 뷰어: 평가 대상 덱과 색이 간섭하지 않도록 무채색 UI */
+:root {
+  --bg: #FFFFFF;
+  --surface: #F1F2F3;
+  --line: #DDDFE3;
+  --text: #16181D;
+  --dim: #6B7080;
+  --ink: #16181D;
+  --radius: 12px;
+  --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 16px; line-height: 1.5; }
+button, input, textarea { font: inherit; color: inherit; }
+#app { max-width: 1080px; margin: 0 auto; padding: 16px 20px 64px; }
+
+h1 { font-size: 28px; font-weight: 700; margin: 24px 0 12px; }
+h2 { font-size: 20px; font-weight: 700; margin: 0 0 8px; }
+p { margin: 0 0 12px; }
+.dim { color: var(--dim); font-size: 14px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 12px 20px; border-radius: 8px; border: 1px solid var(--ink); background: var(--ink); color: #fff; font-weight: 500; cursor: pointer; }
+.btn.ghost { background: #fff; color: var(--ink); border-color: var(--line); }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .35; cursor: default; }
+
+.card { border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin: 16px 0; background: #fff; }
+.card.surface { background: var(--surface); border-color: transparent; }
+
+/* 진행 표시 */
+.progress { display: flex; gap: 6px; margin: 8px 0 16px; }
+.progress span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+.progress span.on { background: var(--ink); }
+
+/* 상황 카드 */
+.context summary { cursor: pointer; font-weight: 700; list-style: none; display: flex; justify-content: space-between; }
+.context summary::-webkit-details-marker { display: none; }
+.context summary::after { content: "접기"; font-weight: 400; color: var(--dim); font-size: 14px; }
+.context:not([open]) summary::after { content: "펼치기"; }
+.context p { margin: 8px 0 0; }
+
+/* 보기 전환 */
+.seg { display: flex; background: var(--surface); border-radius: 10px; padding: 4px; margin: 16px 0 12px; }
+.seg button { flex: 1; min-height: 44px; border: 0; border-radius: 8px; background: transparent; font-weight: 500; cursor: pointer; color: var(--dim); }
+.seg button.on { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+/* 덱 탭 */
+.tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; }
+.tabs button { flex: 0 0 auto; min-width: 52px; min-height: 44px; border-radius: 8px; border: 1px solid var(--line); background: #fff; font-weight: 700; cursor: pointer; }
+.tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.tabs button.seen:not(.on)::after { content: "·"; margin-left: 2px; color: var(--dim); }
+
+/* 슬라이드 뷰어 */
+.stage { position: relative; background: var(--surface); border-radius: var(--radius); overflow: hidden; user-select: none; touch-action: pan-y; }
+.stage img { display: block; width: 100%; height: auto; }
+.stage .nav { position: absolute; top: 0; bottom: 0; width: 22%; border: 0; background: transparent; cursor: pointer; }
+.stage .nav.prev { left: 0; } .stage .nav.next { right: 0; }
+.stage-bar { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; }
+.stage-bar .arrows { display: flex; gap: 8px; }
+.stage-bar .arrows button { min-width: 48px; min-height: 44px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-size: 18px; }
+.thumbs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 8px; }
+.thumbs img { flex: 0 0 auto; width: 112px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; background: var(--surface); }
+.thumbs img.on { border-color: var(--ink); }
+
+/* 비교 보기 */
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; }
+.chips button { flex: 0 0 auto; min-height: 40px; padding: 8px 14px; border-radius: 20px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-weight: 500; }
+.chips button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 720px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1000px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+.grid figure { margin: 0; cursor: pointer; }
+.grid figcaption { font-weight: 700; margin-bottom: 6px; }
+.grid img { width: 100%; display: block; border-radius: 8px; background: var(--surface); }
+.grid .none { aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: var(--surface); color: var(--dim); font-size: 14px; }
+
+/* 문항 */
+.q { margin: 24px 0; }
+.q-title { font-weight: 700; margin-bottom: 10px; }
+.q-title .req { color: var(--dim); font-weight: 400; font-size: 14px; margin-left: 4px; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opts label { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: #fff; }
+.opts input { position: absolute; opacity: 0; pointer-events: none; }
+.opts label.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.opts.col { flex-direction: column; }
+.opts.col label { width: 100%; }
+input[type=text], textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: #fff; }
+textarea { min-height: 96px; resize: vertical; }
+input[type=text]:focus, textarea:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+/* 미캔 식별 그리드 */
+.idgrid { margin: 12px 0 20px; }
+.idgrid .covers { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 8px 0; }
+.idgrid .covers div { font-size: 12px; font-weight: 700; text-align: center; }
+.idgrid .covers img { width: 100%; border-radius: 4px; display: block; }
+
+.err { color: #B42318; font-size: 14px; margin-top: 8px; min-height: 20px; }
+.footer-actions { display: flex; gap: 8px; margin-top: 24px; }
+.footer-actions .btn { flex: 1; }
+.sep { height: 1px; background: var(--line); margin: 32px 0 8px; }
+
+/* 시작 화면 단계 안내 */
+.step { display: flex; gap: 12px; margin: 14px 0; }
+.step-no { flex: 0 0 28px; height: 28px; border-radius: 14px; background: var(--ink); color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.step-title { font-weight: 700; margin-bottom: 2px; }
+
+.q-help { color: var(--dim); font-size: 14px; margin: -4px 0 10px; }
+.topbar { display: flex; justify-content: flex-end; }
+.link { border: 0; background: none; color: var(--dim); font-size: 14px; text-decoration: underline; cursor: pointer; padding: 8px 0; min-height: 36px; }
