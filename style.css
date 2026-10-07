@@ -107,3 +107,11 @@ input[type=text]:focus, textarea:focus { outline: 2px solid var(--ink); outline-
 .q-help { color: var(--dim); font-size: 14px; margin: -4px 0 10px; }
 .topbar { display: flex; justify-content: flex-end; }
 .link { border: 0; background: none; color: var(--dim); font-size: 14px; text-decoration: underline; cursor: pointer; padding: 8px 0; min-height: 36px; }
+
+/* 한눈에 보기 */
+.ov-row { margin: 0 0 20px; }
+.ov-label { font-weight: 700; margin-bottom: 6px; }
+.ov-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
+.ov-strip img { flex: 0 0 auto; width: 180px; border-radius: 6px; background: var(--surface); cursor: pointer; border: 1px solid var(--line); }
+@media (min-width: 720px) { .ov-strip img { width: 220px; } }
+.seg button { font-size: 15px; padding: 0 6px; }

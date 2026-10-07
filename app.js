@@ -69,6 +69,11 @@
   };
   const img = (s, L, n, thumb) => `img/${s}/${L}/${thumb ? 't/' : ''}${String(n).padStart(2, '0')}.jpg`;
   let enteredAt = Date.now();
+  // 이미지 미리 불러오기 (참조를 들고 있어야 브라우저가 버리지 않음)
+  const cache = new Map();
+  const preload = (src) => { if (!cache.has(src)) { const im = new Image(); im.src = src; cache.set(src, im); } return cache.get(src); };
+  const preloadDeck = (sid, L, n) => { for (let i = 1; i <= n; i++) preload(img(sid, L, i)); };
+  let viewerApi = null;
   const STEPS = ['profile', 's1', 's2', 's3', 'final'];
   const progress = () => el('div', { class: 'progress' }, STEPS.map((k, i) => el('span', { class: i <= STEPS.indexOf(st.step) ? 'on' : '' })));
   function restart() {
@@ -114,7 +119,7 @@
       el('div', { class: 'card' },
         el('div', { class: 'q-title' }, '이렇게 진행돼요'),
         step('1', '상황 읽기', '누가, 어떤 자리에서, 누구에게 보여줄 자료인지 먼저 읽어주세요.'),
-        step('2', '자료 6개 둘러보기', '"자료별로 보기"에서 A~F를 눌러 한 장씩 넘겨보고, "같은 장끼리 비교"에서 표지처럼 같은 내용을 다룬 장을 나란히 볼 수 있어요.'),
+        step('2', '자료 6개 둘러보기', '"자료별로 보기"에서 A~F를 한 장씩 넘겨보고, "한눈에 보기"에서 자료 6개의 전체 모습을, "같은 장 비교"에서 표지처럼 같은 내용을 다룬 장을 나란히 볼 수 있어요.'),
         step('3', '질문에 답하기', '이 상황에서 쓰고 싶은 자료와 AI가 만든 티가 나는 자료를 골라주세요. 자료마다 4문항이에요.'),
         el('p', { class: 'dim', style: 'margin:12px 0 0' }, '이 과정을 상황 3개에서 반복하고, 마지막에 몇 가지만 더 여쭤볼게요.')),
       el('div', { class: 'card surface' },
@@ -151,35 +156,65 @@
 
     const viewer = el('div');
     const drawViewer = () => {
-      viewer.replaceChildren(v.mode === 'deck' ? deckView() : compareView());
+      viewerApi = null;
+      viewer.replaceChildren(v.mode === 'deck' ? deckView() : v.mode === 'overview' ? overviewView() : compareView());
     };
+    const openDeck = (L, n) => { v.mode = 'deck'; v.deck = L; v.slide = n || 1; save(); render(); };
 
+    // 자료별로 보기: 덱을 열 때 한 번만 그리고, 장을 넘길 때는 큰 이미지와 선택 표시만 바꾼다
     function deckView() {
-      markSeen();
       const n = sc.decks[v.deck];
+      preloadDeck(sc.id, v.deck, n);
       const tabs = el('div', { class: 'tabs' }, st.order[sc.id].map(L => el('button', {
         class: (L === v.deck ? 'on' : '') + (st.seen[sc.id][L] ? ' seen' : ''),
         onclick: () => { v.deck = L; v.slide = 1; save(); drawViewer(); }
       }, L)));
-      const main = el('img', { src: img(sc.id, v.deck, v.slide), alt: `자료 ${v.deck} ${v.slide}번째 장` });
-      const move = (d) => { const ns = v.slide + d; if (ns < 1 || ns > n) return; v.slide = ns; save(); drawViewer(); };
+      const main = el('img', { src: img(sc.id, v.deck, v.slide), alt: '' });
+      const label = el('span', { class: 'dim' });
+      const prevBtn = el('button', { 'aria-label': '이전 장', onclick: () => move(-1) }, '‹');
+      const nextBtn = el('button', { 'aria-label': '다음 장', onclick: () => move(1) }, '›');
+      const thumbs = el('div', { class: 'thumbs' });
+      const thumbImgs = [];
+      for (let i = 1; i <= n; i++) {
+        const t = el('img', { src: img(sc.id, v.deck, i, true), alt: `${i}번째 장`, onclick: () => goTo(i) });
+        thumbImgs.push(t); thumbs.append(t);
+      }
+      function update() {
+        markSeen();
+        const src = img(sc.id, v.deck, v.slide);
+        const pre = cache.get(src);
+        if (pre && pre.complete) main.src = src;            // 미리 불러온 이미지는 바로 교체
+        else { const im = new Image(); im.onload = () => { if (img(sc.id, v.deck, v.slide) === src) main.src = src; }; im.src = src; }
+        main.alt = `자료 ${v.deck} ${v.slide}번째 장`;
+        label.textContent = `자료 ${v.deck} · ${v.slide} / ${n}`;
+        prevBtn.disabled = v.slide === 1; nextBtn.disabled = v.slide === n;
+        thumbImgs.forEach((t, i) => t.classList.toggle('on', i + 1 === v.slide));
+        const on = thumbImgs[v.slide - 1];
+        if (on) thumbs.scrollTo({ left: on.offsetLeft - thumbs.clientWidth / 2 + on.clientWidth / 2, behavior: 'smooth' });
+      }
+      function goTo(i) { v.slide = i; save(); update(); }
+      function move(d) { const ns = v.slide + d; if (ns < 1 || ns > n) return; goTo(ns); }
       const stage = el('div', { class: 'stage' }, main,
         el('button', { class: 'nav prev', 'aria-label': '이전 장', onclick: () => move(-1) }),
         el('button', { class: 'nav next', 'aria-label': '다음 장', onclick: () => move(1) }));
       let sx = null;
       stage.addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, { passive: true });
       stage.addEventListener('touchend', e => { if (sx == null) return; const dx = e.changedTouches[0].clientX - sx; if (Math.abs(dx) > 40) move(dx < 0 ? 1 : -1); sx = null; });
-      const bar = el('div', { class: 'stage-bar' },
-        el('span', { class: 'dim' }, `자료 ${v.deck} · ${v.slide} / ${n}`),
-        el('div', { class: 'arrows' },
-          el('button', { 'aria-label': '이전 장', onclick: () => move(-1), disabled: v.slide === 1 }, '‹'),
-          el('button', { 'aria-label': '다음 장', onclick: () => move(1), disabled: v.slide === n }, '›')));
-      const thumbs = el('div', { class: 'thumbs' });
-      for (let i = 1; i <= n; i++) thumbs.append(el('img', { src: img(sc.id, v.deck, i, true), class: i === v.slide ? 'on' : '', loading: 'lazy', alt: `${i}번째 장`, onclick: () => { v.slide = i; save(); drawViewer(); } }));
-      // 다음 장 미리 불러오기
-      if (v.slide < n) { const p = new Image(); p.src = img(sc.id, v.deck, v.slide + 1); }
-      setTimeout(() => { const on = thumbs.querySelector('.on'); if (on) thumbs.scrollLeft = on.offsetLeft - thumbs.clientWidth / 2 + on.clientWidth / 2; }, 0);
+      const bar = el('div', { class: 'stage-bar' }, label, el('div', { class: 'arrows' }, prevBtn, nextBtn));
+      viewerApi = { move };
+      setTimeout(update, 0);
       return el('div', {}, tabs, stage, bar, thumbs);
+    }
+
+    // 한눈에 보기: 덱마다 한 줄, 모든 장을 가로로 펼쳐 전체 인상을 비교
+    function overviewView() {
+      const rows = st.order[sc.id].map(L => {
+        const n = sc.decks[L];
+        const strip = el('div', { class: 'ov-strip' });
+        for (let i = 1; i <= n; i++) strip.append(el('img', { src: img(sc.id, L, i, true), alt: `자료 ${L} ${i}번째 장`, onclick: () => openDeck(L, i) }));
+        return el('div', { class: 'ov-row' }, el('div', { class: 'ov-label' }, `자료 ${L}`, el('span', { class: 'dim' }, ` · ${n}장`)), strip);
+      });
+      return el('div', {}, el('p', { class: 'dim' }, '자료마다 모든 장을 한 줄로 펼쳤어요. 옆으로 밀어서 보고, 누르면 그 장부터 크게 볼 수 있어요.'), ...rows);
     }
 
     function compareView() {
@@ -189,16 +224,17 @@
       }, c.name)));
       const grid = el('div', { class: 'grid' }, st.order[sc.id].map(L => {
         const n = pt.slides[L];
-        return el('figure', { onclick: () => { if (!n) return; v.mode = 'deck'; v.deck = L; v.slide = n; save(); render(); } },
+        return el('figure', { onclick: () => { if (n) openDeck(L, n); } },
           el('figcaption', {}, `자료 ${L}`),
-          n ? el('img', { src: img(sc.id, L, n), loading: 'lazy', alt: `자료 ${L} ${pt.name}` }) : el('div', { class: 'none' }, '해당하는 장이 없어요'));
+          n ? el('img', { src: img(sc.id, L, n), alt: `자료 ${L} ${pt.name}` }) : el('div', { class: 'none' }, '해당하는 장이 없어요'));
       }));
       return el('div', {}, chips, el('p', { class: 'dim' }, '같은 내용을 다룬 장끼리 모았어요. 누르면 그 자료를 이어서 넘겨볼 수 있어요.'), grid);
     }
 
-    const seg = el('div', { class: 'seg' },
-      el('button', { class: v.mode === 'deck' ? 'on' : '', onclick: () => { v.mode = 'deck'; save(); render(); } }, '자료별로 보기'),
-      el('button', { class: v.mode === 'compare' ? 'on' : '', onclick: () => { v.mode = 'compare'; save(); render(); } }, '같은 장끼리 비교'));
+    const segBtn = (mode, text) => el('button', { class: v.mode === mode ? 'on' : '', onclick: () => { v.mode = mode; save(); render(); } }, text);
+    const seg = el('div', { class: 'seg' }, segBtn('deck', '자료별로 보기'), segBtn('overview', '한눈에 보기'), segBtn('compare', '같은 장 비교'));
+    // 이 시나리오의 썸네일은 처음에 모두 불러둔다
+    STUDY.scenarios.filter(x => x.id === sc.id).forEach(x => LETTERS.forEach(L => { for (let i = 1; i <= x.decks[L]; i++) preload(img(x.id, L, i, true)); }));
 
     const p = sc.id + '_';
     const err = el('div', { class: 'err' });
@@ -280,12 +316,9 @@
 
   // 키보드 ← → 로 장 넘기기 (자료별 보기에서만)
   document.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
-    const sc = STUDY.scenarios.find(s => s.id === st.step); if (!sc) return;
-    const v = st.view[sc.id]; if (!v || v.mode !== 'deck') return;
-    const n = sc.decks[v.deck];
-    if (e.key === 'ArrowRight' && v.slide < n) { v.slide++; save(); render(); }
-    if (e.key === 'ArrowLeft' && v.slide > 1) { v.slide--; save(); render(); }
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || !viewerApi) return;
+    if (e.key === 'ArrowRight') viewerApi.move(1);
+    if (e.key === 'ArrowLeft') viewerApi.move(-1);
   });
 
   render();
