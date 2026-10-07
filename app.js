@@ -19,7 +19,11 @@
   });
   let st;
   try { st = JSON.parse(localStorage.getItem(STORE)) || fresh(); } catch (e) { st = fresh(); }
-  if (new URLSearchParams(location.search).has('reset')) { st = fresh(); history.replaceState(null, '', location.pathname); }
+  let resetFrom = null;   // ?reset으로 지운 이전 응답. 전송 준비 후 reset 기록을 남긴다
+  if (new URLSearchParams(location.search).has('reset')) {
+    if (st.step !== 'intro') resetFrom = { rid: st.rid, step: st.step };
+    st = fresh(); history.replaceState(null, '', location.pathname);
+  }
   const save = () => { try { localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) {} };
 
   STUDY.scenarios.forEach(s => { st.order[s.id] = LETTERS.slice(); });
@@ -47,13 +51,14 @@
       }
     } finally { flushing = false; }
   }
-  function send(step, payload) {
-    const body = JSON.stringify({ rid: st.rid, step, ts: new Date().toISOString(), payload });
+  function send(step, payload, rid = st.rid) {
+    const body = JSON.stringify({ rid, step, ts: new Date().toISOString(), payload });
     writeQ([...readQ(), body]);
     if (!window.ENDPOINT) { console.info('[미리보기] 전송 생략', body); return; }
     flush();
   }
   window.addEventListener('online', flush);
+  if (resetFrom) send('reset', { fromStep: resetFrom.step }, resetFrom.rid);
   flush();
 
   // ---------- 공통 ----------
